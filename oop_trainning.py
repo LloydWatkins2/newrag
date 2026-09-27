@@ -3,81 +3,180 @@ import pandas as pd
 from abc import abstractmethod, ABC
 from pathlib import Path
 
-from pandas.errors import EmptyDataError, ParserError
+from pandas.errors import ParserError
+
+
+# =========================
+# Exceptions
+# =========================
+
+class DocumentError(Exception):
+    """Base exception cho document pipeline."""
+    pass
+
+
+class DocumentValidationError(DocumentError):
+    """Base exception cho validation."""
+    pass
+
+
+class DocumentNotFoundError(DocumentValidationError):
+    """File không tồn tại."""
+    pass
+
+
+class EmptyDocumentError(DocumentValidationError):
+    """File tồn tại nhưng rỗng."""
+    pass
+
+
+class DocumentParsingError(DocumentError):
+    """Không thể parse document."""
+    pass
+
+
+# =========================
+# Document
+# =========================
 
 class Document:
-    def __init__(self,content:str,metadata:dict) -> None:
-        self.content=content
-        self.metadata=metadata
-    @classmethod
-    def from_csv(cls,df:pd.DataFrame,metadata:dict) -> 'Document':
-        # sử lý df thành str.
-        return cls(content=df,metadata=metadata)
+    def __init__(self, content: str, metadata: dict) -> None:
+        self.content = content
+        self.metadata = metadata
 
-class contexmng:
-    def __init__(self,destination,mode) -> None:
-        self.destination=destination
-        self.mode=mode
+
+# =========================
+# Context manager
+# =========================
+
+class ContextMNG:
+    def __init__(self, destination, mode) -> None:
+        self.destination = destination
+        self.mode = mode
+
     def __enter__(self):
-        self.file=open(self.destination,mode=self.mode,encoding="UTF-8")
+        self.file = open(
+            self.destination,
+            mode=self.mode,
+            encoding="UTF-8"
+        )
         return self.file
-    def __exit__(self,exc_type,exc_val,traceback):
-        if exc_type is not None:
-            print(f'error dectacted {exc_type.__name__};code error {exc_val}')
-            self.file.close()
-            return False;
-        else:
-            print("done")
-            self.file.close()
-            return True
 
+    def __exit__(self, exc_type, exc_val, traceback):
+        self.file.close()
+
+        # False/None -> exception tiếp tục propagate
+        return False
+
+
+# =========================
+# Base Loader
+# =========================
 
 class DocumentLoader(ABC):
-    @staticmethod
-    def validate(destination):
+
+    def __init__(self, destination) -> None:
+        self.destination = destination
+
+    def validate(self) -> None:
         try:
-            if(os.path.getsize(destination)>0): 
-                print("Path validated to open")
-            else:
-                print("File empty")
-                raise EmptyDataError
+            size = os.path.getsize(self.destination)
+
         except FileNotFoundError as e:
-            print(f"No file found in this self.destination, debug messages: {e}")
-            raise FileNotFoundError
-       
+            raise DocumentNotFoundError(
+                f"Document not found: {self.destination}"
+            ) from e
+
+        if size == 0:
+            raise EmptyDocumentError(
+                f"Document is empty: {self.destination}"
+            )
+
+    def metaextraction(self) -> dict:
+        meta = Path(self.destination)
+
+        return {
+            "name": meta.name,
+            "type": meta.suffix,
+            "stats": meta.stat(),
+        }
+
+    def load(self) -> Document:
+        """
+        Orchestrate toàn bộ quá trình:
+
+        validate -> parse -> metadata -> Document
+        """
+        self.validate()
+
+        content = self.parse()
+
+        metadata = self.metaextraction()
+
+        return Document(
+            content=content,
+            metadata=metadata
+        )
+
     @abstractmethod
-    def loader() -> Document:
+    def parse(self) -> str:
         pass
 
-class txtloader(DocumentLoader):
-    def __init__(self,destination) -> None:
-        self.destination=destination
-    def loader(self):
-        DocumentLoader.validate(self.destination)
-        with contexmng(self.destination,"r+")as f:
-            content=f.read();
-        meta=Path(self.destination)
-        metadata={
-            "name":meta.name,
-            "type":meta.suffix,
-            "stats":meta.stat(),
-        }
-        return Document(content,metadata);
-class csvloader(DocumentLoader):
-    def __init__(self,destination) -> None:
-        self.destination=destination
- 
-    def loader(self):
-        try:
-            f=pd.read_csv(self.destination,encoding="UTF-8")   
-            meta=Path(self.destination)
-            metadata={
-                "name":meta.name,
-                "type":meta.suffix,
-                "stats":meta.stat(),
-            }
-            return Document.from_csv(f,metadata)
-        except ParserError as e:
-            print(f"parser error {e} occurred, No file openned")
 
-Doc=txtloader("text.txt").loader()
+# =========================
+# TXT Loader
+# =========================
+
+class TXTLoader(DocumentLoader):
+
+    def parse(self) -> str:
+        with ContextMNG(self.destination, "r") as f:
+            return f.read()
+
+
+# =========================
+# CSV Loader
+# =========================
+
+class CSVLoader(DocumentLoader):
+
+    def parse(self) -> str:
+        try:
+            df = pd.read_csv(
+                self.destination,
+                encoding="UTF-8"
+            )
+
+            return df.to_string()
+
+        except ParserError as e:
+            raise DocumentParsingError(
+                f"Failed to parse CSV: {self.destination}"
+            ) from e
+
+
+# =========================
+# Test
+# =========================
+
+if __name__ == "__main__":
+
+    try:
+        doc = TXTLoader("word.txt").load()
+
+        print(type(doc))
+        print(type(doc.content))
+        print(doc.metadata)
+
+    except DocumentError as e:
+        print(f"Document error: {e}")
+
+    try:
+        csv_doc = CSVLoader("asaffe.csv").load()
+
+        print(type(csv_doc))
+        print(type(csv_doc.content))
+        print(csv_doc.metadata)
+
+    except DocumentError as e:
+        print(f"Document error: {e}")
