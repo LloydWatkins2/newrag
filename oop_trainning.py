@@ -154,7 +154,6 @@ class CSVLoader(DocumentLoader):
                 f"Failed to parse CSV: {self.destination}"
             ) from e
 
-
 # =========================
 # Test
 # =========================
