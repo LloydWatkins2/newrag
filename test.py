@@ -2,6 +2,9 @@ import os
 import pandas as pd
 from abc import abstractmethod, ABC
 from pathlib import Path
+from pandas.errors import ParserError
+
+from pandas.errors import ParserError,EmptyDataError
 
 
 class DocumentError(Exception):
@@ -69,8 +72,17 @@ class csvpasser(passers):
         return ".csv"
 
     def parser(self, destination) -> str:
-        doc = pd.read_csv(destination, encoding="UTF8")
-        return doc.to_string()
+        try:
+            doc = pd.read_csv(destination, encoding="UTF8")
+            return doc.to_string()
+        except ParserError as e:
+            raise DocumentParsingError(
+                f"cant analyze csv file{e}"
+            ) from e
+        except EmptyDataError as e:
+            raise DocumentParsingError(
+                f"data in table is invalid: errors {e}"
+            ) from e
 
 
 class Document:
