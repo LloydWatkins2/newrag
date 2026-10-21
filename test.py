@@ -1,10 +1,11 @@
 import os
 import pandas as pd
+import json
+
 from abc import abstractmethod, ABC
 from pathlib import Path
 from pandas.errors import ParserError
-
-from pandas.errors import ParserError,EmptyDataError
+from pandas.errors import ParserError, EmptyDataError
 
 
 class DocumentError(Exception):
@@ -76,13 +77,9 @@ class csvpasser(passers):
             doc = pd.read_csv(destination, encoding="UTF8")
             return doc.to_string()
         except ParserError as e:
-            raise DocumentParsingError(
-                f"cant analyze csv file{e}"
-            ) from e
+            raise DocumentParsingError(f"cant analyze csv file{e}") from e
         except EmptyDataError as e:
-            raise DocumentParsingError(
-                f"data in table is invalid: errors {e}"
-            ) from e
+            raise DocumentParsingError(f"data in table is invalid: errors {e}") from e
 
 
 class Document:
@@ -117,7 +114,8 @@ class DocumentLoader(ABC):
         return {
             "name": meta.name,
             "type": meta.suffix,
-            "stats": meta.stat(),
+            "size": meta.stat().st_size,
+            "last_modified_at": meta.stat().st_mtime_ns,
         }
 
     def load(self) -> Document:
@@ -135,11 +133,13 @@ class DocumentLoader(ABC):
 
 
 if __name__ == "__main__":
-    file1 = "doc.txt"
-    file2 = "doc.csv"
-    f1 = DocumentLoader(file1, txtpasser()).load()
-    print(f1.content)
-    f2 = DocumentLoader(file2, csvpasser()).load()
-    print(f2.content)
-    f3 = DocumentLoader(file2, txtpasser()).load()
-    print(f3.content)
+    file1 = "malformed.csv"
+    file2 = "no_readable_table.csv"
+    f1 = DocumentLoader("docx.csv", csvpasser()).load()
+    print(f1.metadata)
+    jsone=json.dumps(f1.metadata)
+    print(jsone)
+# f2 = DocumentLoader(file1, csvpasser()).load()
+# print(f2.content)
+# f3 = DocumentLoader(file2, csvpasser()).load()
+# print(f3.content)
