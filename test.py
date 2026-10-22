@@ -1,9 +1,12 @@
+from ntpath import getsize
 import os
+from numpy import size
 import pandas as pd
 import json
 
 from abc import abstractmethod, ABC
 from pathlib import Path
+from pandas.core.arrays import boolean
 from pandas.errors import ParserError
 from pandas.errors import ParserError, EmptyDataError
 
@@ -110,13 +113,16 @@ class DocumentLoader(ABC):
 
     def metaextraction(self) -> dict:
         meta = Path(self.destination)
-
+        stat=meta.stat();
         return {
             "name": meta.name,
             "type": meta.suffix,
-            "size": meta.stat().st_size,
-            "last_modified_at": meta.stat().st_mtime_ns,
+            "size": stat.st_size,
+            "last_modified_at": stat.st_mtime_ns,
         }
+    def check_modified(self,metad)->bool:
+        curmetadata=self.metaextraction()
+        return not (curmetadata.get("size")==metad.get("size") and curmetadata.get("last_modified_at")==metad.get("last_modified_at"))
 
     def load(self) -> Document:
         """
@@ -133,13 +139,19 @@ class DocumentLoader(ABC):
 
 
 if __name__ == "__main__":
-    file1 = "malformed.csv"
-    file2 = "no_readable_table.csv"
-    f1 = DocumentLoader("docx.csv", csvpasser()).load()
-    print(f1.metadata)
-    jsone=json.dumps(f1.metadata)
-    print(jsone)
+    #file1 = "malformed.csv"
+    #file2 = "no_readable_table.csv"
+    #f1 = DocumentLoader("docx.csv", csvpasser()).load()
+    #print(f1.metadata)
+    #jsone=json.dumps(f1.metadata)
+#print(jsone)
 # f2 = DocumentLoader(file1, csvpasser()).load()
 # print(f2.content)
 # f3 = DocumentLoader(file2, csvpasser()).load()
 # print(f3.content)
+#
+    file1="doc.txt";
+    metad=DocumentLoader(file1,txtpasser()).metaextraction()
+    with open(file1,"r+") as f:
+        f.write("\ntoi bi ngu")
+    print(DocumentLoader(file1,txtpasser()).check_modified(metad))
